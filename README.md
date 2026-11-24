@@ -6,7 +6,7 @@
 ---
 
 ## 📹 Link Video Demonstrasi
-- **URL Video Demo**: [Tempelkan Link YouTube / Google Drive Video Kamu di Sini]
+- **URL Video Demo**: 
 
 ---
 
