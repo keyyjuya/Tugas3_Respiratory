@@ -2,34 +2,154 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Respiratory Tracking - Gerak Bahu</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: white; text-align: center; margin: 0; padding: 20px; }
-    .container { display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 10px; }
-    .canvas-container { position: relative; width: 640px; height: 480px; }
-    video, #outputCanvas { position: absolute; top: 0; left: 0; width: 640px; height: 480px; border-radius: 8px; }
-    #plotCanvas { background: #1e1e1e; border-radius: 8px; border: 1px solid #333; }
-    .info-card { background: #2a2a2a; padding: 12px 25px; border-radius: 8px; font-size: 1.2rem; border: 1px solid #444; }
-    .rpm-val { font-size: 2rem; color: #00ffcc; font-weight: bold; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h2 { margin-bottom: 5px; color: #00ffcc; }
+    p.subtitle { margin-top: 0; color: #aaa; font-size: 0.9rem; margin-bottom: 15px; }
+    
+    .main-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+      max-width: 680px;
+      width: 100%;
+    }
+
+    .controls-panel {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 5px;
+    }
+
+    .btn {
+      background: #2a2a2a;
+      color: #fff;
+      border: 1px solid #444;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .btn:hover { background: #3a3a3a; border-color: #00ffcc; }
+    .btn-danger { border-color: #ff5555; }
+    .btn-danger:hover { background: #4a1515; }
+
+    .status-badge {
+      background: #1e293b;
+      color: #38bdf8;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: bold;
+      border: 1px solid #0284c7;
+    }
+
+    .view-box {
+      position: relative;
+      width: 640px;
+      height: 480px;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      background: #000;
+    }
+
+    video, canvas#outputCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 640px;
+      height: 480px;
+    }
+
+    .metrics-card {
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 15px 25px;
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .rpm-container { text-align: left; }
+    .rpm-label { font-size: 0.9rem; color: #888; }
+    .rpm-value { font-size: 2.2rem; font-weight: bold; color: #00ffcc; }
+    .status-text { font-size: 0.85rem; color: #eab308; }
+
+    canvas#plotCanvas {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 10px;
+      width: 100%;
+      height: 140px;
+    }
+
+    .shortcut-info {
+      font-size: 0.8rem;
+      color: #71717a;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
+
   <h2>🫁 Live Respiratory Tracking (Gerak Bahu)</h2>
-  <p>MediaPipe Pose Landmark (Titik 11 & 12) + Real-Time Signal Plot</p>
-  
-  <div class="container">
-    <div class="canvas-container">
+  <p class="subtitle">Sistem Teknologi Multimedia — Tugas 3 (Web App Version)</p>
+
+  <div class="main-container">
+    
+    <!-- Control Buttons -->
+    <div class="controls-panel">
+      <button class="btn" onclick="toggleMethod()">🔄 Ganti Metode (M)</button>
+      <button class="btn" onclick="resetBuffer()">🧹 Reset Sinyal (R)</button>
+      <button class="btn btn-danger" onclick="toggleCamera()">⏹️ Matikan/Jalankan Kamera (Q)</button>
+    </div>
+
+    <!-- Active Method Badge -->
+    <div id="methodBadge" class="status-badge">Metode Aktif: B · Pose Landmark (MediaPipe)</div>
+
+    <!-- Video & Overlay Canvas -->
+    <div class="view-box">
       <video id="webcam" playsinline></video>
       <canvas id="outputCanvas" width="640" height="480"></canvas>
     </div>
 
-    <div class="info-card">
-      Laju Napas (Estimasi): <span id="rpmDisplay" class="rpm-val">Mengumpulkan Data...</span> RPM
+    <!-- Metrics Display -->
+    <div class="metrics-card">
+      <div class="rpm-container">
+        <div class="rpm-label">Estimasi Laju Napas</div>
+        <div id="rpmValue" class="rpm-value">-- RPM</div>
+      </div>
+      <div id="statusText" class="status-text">Mengumpulkan Sinyal (Butuh 8-10 dtk)...</div>
     </div>
 
-    <canvas id="plotCanvas" width="640" height="150"></canvas>
+    <!-- Real-time Signal Plot -->
+    <canvas id="plotCanvas" width="640" height="140"></canvas>
+
+    <div class="shortcut-info">
+      💡 <b>Shortcut Keyboard:</b> Tekan <code>M</code> (Ganti Metode) | <code>R</code> (Reset) | <code>Q</code> (Mati/Jalankan Kamera)
+    </div>
+
   </div>
 
   <script>
@@ -38,11 +158,18 @@
     const canvasCtx = canvasElement.getContext('2d');
     const plotCanvas = document.getElementById('plotCanvas');
     const plotCtx = plotCanvas.getContext('2d');
-    const rpmDisplay = document.getElementById('rpmDisplay');
+    const rpmValueEl = document.getElementById('rpmValue');
+    const statusTextEl = document.getElementById('statusText');
+    const methodBadgeEl = document.getElementById('methodBadge');
 
-    let signalBuffer = [];
-    const MAX_BUFFER = 300;
+    let isCameraRunning = true;
+    let currentMethod = 'B'; // 'B' = Pose, 'A' = Klasik ROI
+    let camera = null;
+    let rawSignal = [];
+    const MAX_BUFFER = 300; // 30 FPS * 10 detik buffer
+    let smoothedRPM = 0;
 
+    // MediaPipe Pose Initialization
     const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
     });
@@ -56,102 +183,241 @@
 
     pose.onResults(onResults);
 
+    // Initialize Camera
+    function initCamera() {
+      camera = new Camera(videoElement, {
+        onFrame: async () => {
+          if (isCameraRunning) {
+            await pose.send({ image: videoElement });
+          }
+        },
+        width: 640,
+        height: 480
+      });
+      camera.start();
+    }
+    initCamera();
+
+    // Toggle Camera (Q)
+    function toggleCamera() {
+      isCameraRunning = !isCameraRunning;
+      if (!isCameraRunning) {
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.fillStyle = '#111';
+        canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.fillStyle = '#ff5555';
+        canvasCtx.font = 'bold 20px Segoe UI';
+        canvasCtx.textAlign = 'center';
+        canvasCtx.fillText('Kamera Dimatikan (Tekan Q untuk Mengaktifkan)', canvasElement.width / 2, canvasElement.height / 2);
+        statusTextEl.innerText = "Kamera Dimatikan";
+        statusTextEl.style.color = "#ff5555";
+      } else {
+        statusTextEl.innerText = "Mengumpulkan Sinyal...";
+        statusTextEl.style.color = "#eab308";
+      }
+    }
+
+    // Toggle Method (M)
+    function toggleMethod() {
+      currentMethod = (currentMethod === 'B') ? 'A' : 'B';
+      resetBuffer();
+      if (currentMethod === 'B') {
+        methodBadgeEl.innerText = "Metode Aktif: B · Pose Landmark (MediaPipe)";
+        methodBadgeEl.style.color = "#38bdf8";
+        methodBadgeEl.style.borderColor = "#0284c7";
+      } else {
+        methodBadgeEl.innerText = "Metode Aktif: A · Klasik ROI Bahu";
+        methodBadgeEl.style.color = "#f43f5e";
+        methodBadgeEl.style.borderColor = "#e11d48";
+      }
+    }
+
+    // Reset Buffer (R)
+    function resetBuffer() {
+      rawSignal = [];
+      smoothedRPM = 0;
+      rpmValueEl.innerText = "-- RPM";
+      statusTextEl.innerText = "Buffer Direset. Mengumpulkan Sinyal...";
+      statusTextEl.style.color = "#eab308";
+      plotCtx.clearRect(0, 0, plotCanvas.width, plotCanvas.height);
+    }
+
+    // Keyboard Event Listener
+    window.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      if (key === 'm') toggleMethod();
+      else if (key === 'r') resetBuffer();
+      else if (key === 'q') toggleCamera();
+    });
+
+    // Main Loop Result Processing
     function onResults(results) {
+      if (!isCameraRunning) return;
+
       canvasCtx.save();
       canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-      if (results.poseLandmarks) {
-        const leftShoulder = results.poseLandmarks[11];
-        const rightShoulder = results.poseLandmarks[12];
+      let currentY = null;
 
-        if (leftShoulder && rightShoulder) {
-          const x1 = leftShoulder.x * canvasElement.width;
-          const y1 = leftShoulder.y * canvasElement.height;
-          const x2 = rightShoulder.x * canvasElement.width;
-          const y2 = rightShoulder.y * canvasElement.height;
+      if (currentMethod === 'B') {
+        // --- METODE B: POSE LANDMARK ---
+        if (results.poseLandmarks) {
+          const p11 = results.poseLandmarks[11]; // Bahu Kiri
+          const p12 = results.poseLandmarks[12]; // Bahu Kanan
 
-          canvasCtx.fillStyle = '#00FF00';
-          canvasCtx.beginPath();
-          canvasCtx.arc(x1, y1, 8, 0, 2 * Math.PI);
-          canvasCtx.arc(x2, y2, 8, 0, 2 * Math.PI);
-          canvasCtx.fill();
+          if (p11 && p12) {
+            const x1 = p11.x * canvasElement.width;
+            const y1 = p11.y * canvasElement.height;
+            const x2 = p12.x * canvasElement.width;
+            const y2 = p12.y * canvasElement.height;
 
-          canvasCtx.strokeStyle = '#00FF00';
-          canvasCtx.lineWidth = 3;
-          canvasCtx.beginPath();
-          canvasCtx.moveTo(x1, y1);
-          canvasCtx.lineTo(x2, y2);
-          canvasCtx.stroke();
+            // Draw Landmark Points & Line
+            canvasCtx.fillStyle = '#00ffcc';
+            canvasCtx.beginPath();
+            canvasCtx.arc(x1, y1, 7, 0, 2 * Math.PI);
+            canvasCtx.arc(x2, y2, 7, 0, 2 * Math.PI);
+            canvasCtx.fill();
 
-          const avgY = -((leftShoulder.y + rightShoulder.y) / 2.0);
-          signalBuffer.push(avgY);
-          if (signalBuffer.length > MAX_BUFFER) signalBuffer.shift();
+            canvasCtx.strokeStyle = '#00ffcc';
+            canvasCtx.lineWidth = 3;
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(x1, y1);
+            canvasCtx.lineTo(x2, y2);
+            canvasCtx.stroke();
 
-          processSignalAndPlot();
+            // Label
+            canvasCtx.fillStyle = '#ffffff';
+            canvasCtx.font = 'bold 12px Segoe UI';
+            canvasCtx.fillText('Bahu Kiri (11)', x1 - 30, y1 - 12);
+            canvasCtx.fillText('Bahu Kanan (12)', x2 - 30, y2 - 12);
+
+            currentY = -((p11.y + p12.y) / 2.0);
+          }
         }
+      } else {
+        // --- METODE A: KLASIK ROI BAHU ---
+        let roiX = 180, roiY = 300, roiW = 280, roiH = 100;
+        
+        if (results.poseLandmarks && results.poseLandmarks[11] && results.poseLandmarks[12]) {
+          const p11 = results.poseLandmarks[11];
+          const p12 = results.poseLandmarks[12];
+          roiX = Math.min(p11.x, p12.x) * canvasElement.width - 20;
+          roiY = ((p11.y + p12.y) / 2.0) * canvasElement.height - 20;
+          roiW = Math.abs(p11.x - p12.x) * canvasElement.width + 40;
+          roiH = 60;
+        }
+
+        // Draw Klasik ROI Box
+        canvasCtx.strokeStyle = '#f43f5e';
+        canvasCtx.lineWidth = 3;
+        canvasCtx.strokeRect(roiX, roiY, roiW, roiH);
+        canvasCtx.fillStyle = '#f43f5e';
+        canvasCtx.font = 'bold 14px Segoe UI';
+        canvasCtx.fillText('ROI Bahu (Klasik Tracker)', roiX, roiY - 8);
+
+        currentY = -(roiY / canvasElement.height);
       }
+
+      if (currentY !== null) {
+        rawSignal.push(currentY);
+        if (rawSignal.length > MAX_BUFFER) rawSignal.shift();
+        processSignalAndComputeRPM();
+      }
+
       canvasCtx.restore();
     }
 
-    function processSignalAndPlot() {
-      if (signalBuffer.length < 90) {
-        rpmDisplay.innerText = "Mengumpulkan Data...";
+    // Preprocessing & RPM Calculation
+    function processSignalAndComputeRPM() {
+      if (rawSignal.length < 90) { // Butuh minimal 3 detik (30 FPS)
+        statusTextEl.innerText = `Mengumpulkan Sinyal (${Math.round(rawSignal.length/30)}s / 10s)...`;
+        statusTextEl.style.color = "#eab308";
         return;
       }
 
-      const mean = signalBuffer.reduce((a, b) => a + b, 0) / signalBuffer.length;
-      const normSignal = signalBuffer.map(v => v - mean);
+      // 1. Detrending (Remove DC Offset / Mean)
+      const mean = rawSignal.reduce((a, b) => a + b, 0) / rawSignal.length;
+      let detrended = rawSignal.map(v => v - mean);
 
-      let smooth = [];
-      for (let i = 0; i < normSignal.length; i++) {
+      // 2. Moving Average Filter (Lowpass smoothing)
+      let filtered = [];
+      const windowSize = 5;
+      for (let i = 0; i < detrended.length; i++) {
         let sum = 0, count = 0;
-        for (let j = Math.max(0, i - 2); j <= Math.min(normSignal.length - 1, i + 2); j++) {
-          sum += normSignal[j];
+        for (let j = Math.max(0, i - windowSize); j <= Math.min(detrended.length - 1, i + windowSize); j++) {
+          sum += detrended[j];
           count++;
         }
-        smooth.push(sum / count);
+        filtered.push(sum / count);
       }
 
+      // 3. Render Signal Waveform on plotCanvas
+      drawPlot(filtered);
+
+      // 4. Peak Detection & Rate Calculation
+      const peaks = [];
+      const minPeakDistance = 20; // Minimal ~0.67 detik antar puncak
+      
+      for (let i = 1; i < filtered.length - 1; i++) {
+        if (filtered[i] > filtered[i - 1] && filtered[i] > filtered[i + 1] && filtered[i] > 0) {
+          if (peaks.length === 0 || (i - peaks[peaks.length - 1]) >= minPeakDistance) {
+            peaks.push(i);
+          }
+        }
+      }
+
+      if (peaks.length >= 2) {
+        let totalIntervalFrames = 0;
+        for (let i = 1; i < peaks.length; i++) {
+          totalIntervalFrames += (peaks[i] - peaks[i - 1]);
+        }
+        const avgIntervalFrames = totalIntervalFrames / (peaks.length - 1);
+        const fps = 30.0;
+        const instantRPM = (60.0 * fps) / avgIntervalFrames;
+
+        // Limiter Rentang Napas Normal (6 - 42 RPM)
+        if (instantRPM >= 6 && instantRPM <= 42) {
+          if (smoothedRPM === 0) smoothedRPM = instantRPM;
+          else smoothedRPM = 0.85 * smoothedRPM + 0.15 * instantRPM; // Smooth transition
+
+          rpmValueEl.innerText = `${smoothedRPM.toFixed(1)} RPM`;
+          statusTextEl.innerText = "✅ Sinyal Terdeteksi & Stabil";
+          statusTextEl.style.color = "#22c55e";
+        }
+      }
+    }
+
+    // Draw Signal Graph
+    function drawPlot(signal) {
       plotCtx.clearRect(0, 0, plotCanvas.width, plotCanvas.height);
-      plotCtx.strokeStyle = '#00ffcc';
+      
+      // Grid line
+      plotCtx.strokeStyle = '#27272a';
+      plotCtx.lineWidth = 1;
+      plotCtx.beginPath();
+      plotCtx.moveTo(0, plotCanvas.height / 2);
+      plotCtx.lineTo(plotCanvas.width, plotCanvas.height / 2);
+      plotCtx.stroke();
+
+      // Signal line
+      plotCtx.strokeStyle = (currentMethod === 'B') ? '#00ffcc' : '#f43f5e';
       plotCtx.lineWidth = 2;
       plotCtx.beginPath();
 
       const step = plotCanvas.width / MAX_BUFFER;
-      const minV = Math.min(...smooth);
-      const maxV = Math.max(...smooth);
-      const range = (maxV - minV) || 0.001;
+      const minV = Math.min(...signal);
+      const maxV = Math.max(...signal);
+      const range = (maxV - minV) || 0.0001;
 
-      for (let i = 0; i < smooth.length; i++) {
+      for (let i = 0; i < signal.length; i++) {
         const x = i * step;
-        const y = plotCanvas.height - ((smooth[i] - minV) / range) * (plotCanvas.height - 20) - 10;
+        const y = plotCanvas.height - ((signal[i] - minV) / range) * (plotCanvas.height - 20) - 10;
         if (i === 0) plotCtx.moveTo(x, y);
         else plotCtx.lineTo(x, y);
       }
       plotCtx.stroke();
-
-      let peaks = 0;
-      for (let i = 1; i < smooth.length - 1; i++) {
-        if (smooth[i] > smooth[i - 1] && smooth[i] > smooth[i + 1] && smooth[i] > 0) {
-          peaks++;
-        }
-      }
-      const durationSec = smooth.length / 30.0;
-      const estimatedRPM = ((peaks / durationSec) * 60).toFixed(1);
-      if (estimatedRPM >= 6 && estimatedRPM <= 42) {
-        rpmDisplay.innerText = estimatedRPM;
-      }
     }
-
-    const camera = new Camera(videoElement, {
-      onFrame: async () => {
-        await pose.send({ image: videoElement });
-      },
-      width: 640,
-      height: 480
-    });
-    camera.start();
   </script>
 </body>
 </html>
