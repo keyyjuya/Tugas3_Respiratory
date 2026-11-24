@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Respiratory Tracking - Gerak Bahu</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: white; text-align: center; margin: 0; padding: 20px; }
+    .container { display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 10px; }
+    .canvas-container { position: relative; width: 640px; height: 480px; }
+    video, #outputCanvas { position: absolute; top: 0; left: 0; width: 640px; height: 480px; border-radius: 8px; }
+    #plotCanvas { background: #1e1e1e; border-radius: 8px; border: 1px solid #333; }
+    .info-card { background: #2a2a2a; padding: 12px 25px; border-radius: 8px; font-size: 1.2rem; border: 1px solid #444; }
+    .rpm-val { font-size: 2rem; color: #00ffcc; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>🫁 Live Respiratory Tracking (Gerak Bahu)</h2>
+  <p>MediaPipe Pose Landmark (Titik 11 & 12) + Real-Time Signal Plot</p>
+  
+  <div class="container">
+    <div class="canvas-container">
+      <video id="webcam" playsinline></video>
+      <canvas id="outputCanvas" width="640" height="480"></canvas>
+    </div>
+
+    <div class="info-card">
+      Laju Napas (Estimasi): <span id="rpmDisplay" class="rpm-val">Mengumpulkan Data...</span> RPM
+    </div>
+
+    <canvas id="plotCanvas" width="640" height="150"></canvas>
+  </div>
+
+  <script>
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('outputCanvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const plotCanvas = document.getElementById('plotCanvas');
+    const plotCtx = plotCanvas.getContext('2d');
+    const rpmDisplay = document.getElementById('rpmDisplay');
+
+    let signalBuffer = [];
+    const MAX_BUFFER = 300;
+
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    pose.onResults(onResults);
+
+    function onResults(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        const leftShoulder = results.poseLandmarks[11];
+        const rightShoulder = results.poseLandmarks[12];
+
+        if (leftShoulder && rightShoulder) {
+          const x1 = leftShoulder.x * canvasElement.width;
+          const y1 = leftShoulder.y * canvasElement.height;
+          const x2 = rightShoulder.x * canvasElement.width;
+          const y2 = rightShoulder.y * canvasElement.height;
+
+          canvasCtx.fillStyle = '#00FF00';
+          canvasCtx.beginPath();
+          canvasCtx.arc(x1, y1, 8, 0, 2 * Math.PI);
+          canvasCtx.arc(x2, y2, 8, 0, 2 * Math.PI);
+          canvasCtx.fill();
+
+          canvasCtx.strokeStyle = '#00FF00';
+          canvasCtx.lineWidth = 3;
+          canvasCtx.beginPath();
+          canvasCtx.moveTo(x1, y1);
+          canvasCtx.lineTo(x2, y2);
+          canvasCtx.stroke();
+
+          const avgY = -((leftShoulder.y + rightShoulder.y) / 2.0);
+          signalBuffer.push(avgY);
+          if (signalBuffer.length > MAX_BUFFER) signalBuffer.shift();
+
+          processSignalAndPlot();
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    function processSignalAndPlot() {
+      if (signalBuffer.length < 90) {
+        rpmDisplay.innerText = "Mengumpulkan Data...";
+        return;
+      }
+
+      const mean = signalBuffer.reduce((a, b) => a + b, 0) / signalBuffer.length;
+      const normSignal = signalBuffer.map(v => v - mean);
+
+      let smooth = [];
+      for (let i = 0; i < normSignal.length; i++) {
+        let sum = 0, count = 0;
+        for (let j = Math.max(0, i - 2); j <= Math.min(normSignal.length - 1, i + 2); j++) {
+          sum += normSignal[j];
+          count++;
+        }
+        smooth.push(sum / count);
+      }
+
+      plotCtx.clearRect(0, 0, plotCanvas.width, plotCanvas.height);
+      plotCtx.strokeStyle = '#00ffcc';
+      plotCtx.lineWidth = 2;
+      plotCtx.beginPath();
+
+      const step = plotCanvas.width / MAX_BUFFER;
+      const minV = Math.min(...smooth);
+      const maxV = Math.max(...smooth);
+      const range = (maxV - minV) || 0.001;
+
+      for (let i = 0; i < smooth.length; i++) {
+        const x = i * step;
+        const y = plotCanvas.height - ((smooth[i] - minV) / range) * (plotCanvas.height - 20) - 10;
+        if (i === 0) plotCtx.moveTo(x, y);
+        else plotCtx.lineTo(x, y);
+      }
+      plotCtx.stroke();
+
+      let peaks = 0;
+      for (let i = 1; i < smooth.length - 1; i++) {
+        if (smooth[i] > smooth[i - 1] && smooth[i] > smooth[i + 1] && smooth[i] > 0) {
+          peaks++;
+        }
+      }
+      const durationSec = smooth.length / 30.0;
+      const estimatedRPM = ((peaks / durationSec) * 60).toFixed(1);
+      if (estimatedRPM >= 6 && estimatedRPM <= 42) {
+        rpmDisplay.innerText = estimatedRPM;
+      }
+    }
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await pose.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480
+    });
+    camera.start();
+  </script>
+</body>
+</html>
